@@ -17,10 +17,10 @@ def parse_args():
     )
     p.add_argument(
         "changes",
-        nargs="+",
+        nargs="*",
         help=(
             "One or more Change-Ids (I...) or numeric change\n"
-            "numbers (e.g. 12345 6197799)"
+            "numbers (e.g. 12345 6197799). Not required if --topic is used."
         ),
     )
     p.add_argument(
@@ -55,9 +55,14 @@ def parse_args():
         help="Do not post changes, only print what would be done",
     )
     p.add_argument(
+        "--topic",
+        "-t",
+        help="Fetch all changes with the specified topic name",
+    )
+    p.add_argument(
         "--related",
         action="store_true",
-        help="Fetch related changes",
+        help="Fetch related changes (dependency chain) for each change",
     )
     p.add_argument("--message", default="", help="Review message")
     return p.parse_args()
@@ -90,22 +95,49 @@ def gerrit_post(session, base_url, path, payload):
     return json.loads(text)
 
 
+def fetch_changes_by_topic(session, base_url, topic):
+    """
+    Fetch all changes with the specified topic name.
+    Returns a list of change numbers (as strings).
+    """
+    topic_changes = []
+
+    try:
+        path = "/a/changes/"
+        params = {"q": f"topic:{topic}"}
+        topic_results = gerrit_get(session, base_url, path, params=params)
+        for c in topic_results:
+            topic_changes.append(str(c.get("_number")))
+    except requests.HTTPError as e:
+        msg = f"⚠️  Failed to fetch changes with topic '{topic}': {e}"
+        print(msg, file=sys.stderr)
+
+    return topic_changes
+
+
 def fetch_related_changes(session, base_url, change_id):
+    """
+    Fetch related changes (dependency chain) for a given change ID.
+    Returns a list of change numbers (as strings).
+    """
+    all_related = set()
+
+    # Fetch revision-related changes
     try:
         path = f"/a/changes/{change_id}/revisions/current/related"
         data = gerrit_get(session, base_url, path)
+        changes = data.get("changes", [])
+        for c in changes:
+            all_related.add(str(c.get("_change_number")))
     except requests.HTTPError as e:
         msg = f"⚠️  Failed to fetch related changes for {change_id}: {e}"
         print(msg, file=sys.stderr)
-        return []
-
-    changes = data.get("changes", [])
-    res = [str(c.get("_change_number")) for c in changes]
 
     # Ensure at least the original change is present
-    if not res:
-        res = [change_id]
-    return res
+    if not all_related:
+        all_related.add(str(change_id))
+
+    return list(all_related)
 
 
 def add_review_to_change(
@@ -133,15 +165,35 @@ if __name__ == "__main__":
     session = requests.Session()
     session.auth = HTTPBasicAuth(args.user, args.password)
 
+    # Validate that either changes or topic is provided
+    if not args.changes and not args.topic:
+        print(
+            "❌ Error: Must provide either change IDs or --topic",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    # Step 1: Determine initial set of changes
+    if args.topic:
+        # Fetch all changes with the specified topic
+        print(f"🔍 Fetching changes with topic '{args.topic}' ...")
+        changes = fetch_changes_by_topic(
+            session, args.url, args.topic
+        )
+    else:
+        # Use the provided change IDs
+        changes = args.changes
+
+    # Step 2: Optionally expand to include related changes
     if args.related:
-        all_changes_set = set()
-        for change in args.changes:
+        changs_set = set()
+        for change in changes:
             print(f"🔍 Fetching related changes for {change} ...")
             related = fetch_related_changes(session, args.url, change)
-            all_changes_set.update(related)
-        all_changes = sorted(all_changes_set)
+            changs_set.update(related)
+        all_changes = sorted(changs_set)
     else:
-        all_changes = args.changes
+        all_changes = changes
 
     print(f"Found {len(all_changes)} change(s):")
     for c in all_changes:
