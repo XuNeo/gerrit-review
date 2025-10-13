@@ -7,12 +7,21 @@ import json
 from requests.auth import HTTPBasicAuth
 import sys
 
+
 def parse_args():
     p = argparse.ArgumentParser(
-        description="Add a review label (e.g. Code-Review +1) to a Gerrit change and related changes"
+        description=(
+            "Add a review label (for example, Code-Review +1) to a Gerrit "
+            "change and its related changes"
+        )
     )
     p.add_argument(
-        "change_id", help="Change-Id (I...) or numeric change number (e.g. 12345)"
+        "changes",
+        nargs="+",
+        help=(
+            "One or more Change-Ids (I...) or numeric change\n"
+            "numbers (e.g. 12345 6197799)"
+        ),
     )
     p.add_argument(
         "--url",
@@ -30,15 +39,26 @@ def parse_args():
         help="Gerrit http password, see gerrit settings/#HTTPCredentials page",
     )
     p.add_argument(
-        "--label", default="Code-Review", help="Label name (default: Code-Review)"
+        "--label",
+        default="Code-Review",
+        help="Label name (default: Code-Review)",
     )
-    p.add_argument("--value", type=int, default=1, help="Label value (default: 1)")
+    p.add_argument(
+        "--value",
+        type=int,
+        default=1,
+        help="Label value (default: 1)",
+    )
     p.add_argument(
         "--dry-run",
         action="store_true",
         help="Do not post changes, only print what would be done",
     )
-    p.add_argument("--related", action="store_true", help="Fetch related changes")
+    p.add_argument(
+        "--related",
+        action="store_true",
+        help="Fetch related changes",
+    )
     p.add_argument("--message", default="", help="Review message")
     return p.parse_args()
 
@@ -47,7 +67,7 @@ def gerrit_get(session, base_url, path, params=None):
     url = base_url.rstrip("/") + path
     r = session.get(url, params=params, timeout=30)
     r.raise_for_status()
-    # Gerrit prepends )]}'\n to JSON responses — need to strip it before parsing
+    # Gerrit prepends )]}' to JSON responses; strip it before parsing
     text = r.text
     if text.startswith(")]}'"):
         text = text.split("\n", 1)[1]
@@ -72,13 +92,11 @@ def gerrit_post(session, base_url, path, payload):
 
 def fetch_related_changes(session, base_url, change_id):
     try:
-        data = gerrit_get(
-            session, base_url, f"/a/changes/{change_id}/revisions/current/related"
-        )
+        path = f"/a/changes/{change_id}/revisions/current/related"
+        data = gerrit_get(session, base_url, path)
     except requests.HTTPError as e:
-        print(
-            f"⚠️  Failed to fetch related changes for {change_id}: {e}", file=sys.stderr
-        )
+        msg = f"⚠️  Failed to fetch related changes for {change_id}: {e}"
+        print(msg, file=sys.stderr)
         return []
 
     changes = data.get("changes", [])
@@ -90,13 +108,17 @@ def fetch_related_changes(session, base_url, change_id):
     return res
 
 
-def add_review_to_change(session, base_url, change_id, label, value, message="", dry_run=False):
+def add_review_to_change(
+    session, base_url, change_id, label, value, message="", dry_run=False
+):
     path = f"/a/changes/{change_id}/revisions/current/review"
     payload = {"labels": {label: value}, "message": message}
     if dry_run:
-        print(
-            f"🟡 [Dry-run] Would POST {label}={value} to {change_id} -> POST {path} with payload: {payload}"
+        msg = (
+            f"🟡 [Dry-run] Would POST {label}={value} to {change_id} -> "
+            f"POST {path} with payload: {payload}"
         )
+        print(msg)
         return
     try:
         resp = gerrit_post(session, base_url, path, payload)
@@ -111,12 +133,15 @@ if __name__ == "__main__":
     session = requests.Session()
     session.auth = HTTPBasicAuth(args.user, args.password)
 
-    print(f"🔍 Fetching related changes for {args.change_id} ...")
     if args.related:
-        related = fetch_related_changes(session, args.url, args.change_id)
-        all_changes = set(related)
+        all_changes_set = set()
+        for change in args.changes:
+            print(f"🔍 Fetching related changes for {change} ...")
+            related = fetch_related_changes(session, args.url, change)
+            all_changes_set.update(related)
+        all_changes = sorted(all_changes_set)
     else:
-        all_changes = [args.change_id]
+        all_changes = args.changes
 
     print(f"Found {len(all_changes)} change(s):")
     for c in all_changes:
