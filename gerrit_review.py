@@ -164,7 +164,7 @@ def add_review_to_change(
         print(f"❌ Failed to post review to {change_id}: {e}", file=sys.stderr)
 
 
-if __name__ == "__main__":
+def main():
     args = parse_args()
 
     # Get username and password from args or environment variables
@@ -211,3 +211,7 @@ if __name__ == "__main__":
         add_review_to_change(
             session, args.url, c, args.label, args.value, dry_run=args.dry_run
         )
+
+
+if __name__ == "__main__":
+    main()

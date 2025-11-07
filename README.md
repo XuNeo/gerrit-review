@@ -1,23 +1,40 @@
-gerrit-review.py
-=================
+gerrit-review
+=============
 
-gerrit-review is a small command-line helper to post review labels to Gerrit changes.
+A command-line tool to post review labels to Gerrit changes.
 
-This repository contains a single script, `gerrit-review.py`, which can be used to set a label (for example, a Jira-Review label) on one or more Gerrit change IDs. It also supports fetching and operating on related changes.
+This tool can be used to set labels (for example, Jira-Review or Code-Review) on one or more Gerrit change IDs. It also supports fetching and operating on related changes and changes within a topic.
 
 Requirements
 ------------
 
-- Python 3.8+ (or your system Python)
-- Network access to your Gerrit server and appropriate authentication (SSH/HTTP) configured for the script's requests.
+- Python 3.8+
+- Network access to your Gerrit server with HTTP authentication configured
 
 Installation
 ------------
 
-No installation is required. Make the script executable and run it directly:
+### From PyPI (recommended)
 
 ```bash
-chmod +x ./gerrit-review.py
+pip install gerrit-review
+```
+
+### From source
+
+```bash
+git clone https://github.com/XuNeo/gerrit-review.git
+cd gerrit-review
+pip install -e .
+```
+
+### Standalone script (legacy)
+
+You can also download and run the standalone script directly:
+
+```bash
+chmod +x gerrit-review
+gerrit-review --help
 ```
 
 Usage
@@ -26,7 +43,7 @@ Usage
 Basic usage:
 
 ```bash
-./gerrit-review.py [options] [change-id ...]
+gerrit-review [options] [change-id ...]
 ```
 
 ### Options
@@ -51,12 +68,12 @@ Credentials can be provided via command-line arguments or environment variables:
 
 ```bash
 # Using command-line arguments
-./gerrit-review.py --user myuser --password mypass --label Jira-Review --value 1 6197799
+gerrit-review --user myuser --password mypass --label Jira-Review --value 1 6197799
 
 # Using environment variables
 export GERRIT_USER=myuser
 export GERRIT_PASSWORD=mypass
-./gerrit-review.py --label Jira-Review --value 1 6197799
+gerrit-review --label Jira-Review --value 1 6197799
 ```
 
 Command-line arguments take precedence over environment variables.
@@ -69,7 +86,7 @@ Examples
 Post a label to one or more changes:
 
 ```bash
-./gerrit-review.py --label Jira-Review --value 1 6197799 6197798
+gerrit-review --label Jira-Review --value 1 6197799 6197798
 ```
 
 ### Example 2: Review changes with their dependencies
@@ -77,7 +94,7 @@ Post a label to one or more changes:
 Fetch related changes (dependency chain) and post the label to all:
 
 ```bash
-./gerrit-review.py --label Jira-Review --value 1 6197799 --related
+gerrit-review --label Jira-Review --value 1 6197799 --related
 ```
 
 Output:
@@ -96,7 +113,7 @@ Found 2 change(s):
 Fetch all changes with a specific topic and post the label:
 
 ```bash
-./gerrit-review.py --topic "my-feature" --label Jira-Review --value 1
+gerrit-review --topic "my-feature" --label Jira-Review --value 1
 ```
 
 ### Example 4: Review topic changes with their dependencies
@@ -104,7 +121,7 @@ Fetch all changes with a specific topic and post the label:
 Fetch all changes in a topic, then fetch their related changes (dependency chains), and post the label to all:
 
 ```bash
-./gerrit-review.py --topic "my-feature" --related --label Jira-Review --value 1
+gerrit-review --topic "my-feature" --related --label Jira-Review --value 1
 ```
 
 Output:
@@ -129,7 +146,7 @@ Found 5 change(s):
 Preview what would be done without actually posting:
 
 ```bash
-./gerrit-review.py --topic "my-feature" --related --label Jira-Review --value 1 --dry-run
+gerrit-review --topic "my-feature" --related --label Jira-Review --value 1 --dry-run
 ```
 
 Notes
