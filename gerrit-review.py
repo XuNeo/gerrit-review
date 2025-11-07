@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import argparse
+import os
 import requests
 import json
 from requests.auth import HTTPBasicAuth
@@ -31,12 +32,15 @@ def parse_args():
     p.add_argument(
         "--user",
         "-u",
-        help="Gerrit username",
+        help="Gerrit username (or set GERRIT_USER env var)",
     )
     p.add_argument(
         "--password",
         "-p",
-        help="Gerrit http password, see gerrit settings/#HTTPCredentials page",
+        help=(
+            "Gerrit http password (or set GERRIT_PASSWORD env var), "
+            "see gerrit settings/#HTTPCredentials page"
+        ),
     )
     p.add_argument(
         "--label",
@@ -162,8 +166,13 @@ def add_review_to_change(
 
 if __name__ == "__main__":
     args = parse_args()
+
+    # Get username and password from args or environment variables
+    user = args.user or os.environ.get("GERRIT_USER")
+    password = args.password or os.environ.get("GERRIT_PASSWORD")
+
     session = requests.Session()
-    session.auth = HTTPBasicAuth(args.user, args.password)
+    session.auth = HTTPBasicAuth(user, password)
 
     # Validate that either changes or topic is provided
     if not args.changes and not args.topic:
@@ -177,9 +186,7 @@ if __name__ == "__main__":
     if args.topic:
         # Fetch all changes with the specified topic
         print(f"🔍 Fetching changes with topic '{args.topic}' ...")
-        changes = fetch_changes_by_topic(
-            session, args.url, args.topic
-        )
+        changes = fetch_changes_by_topic(session, args.url, args.topic)
     else:
         # Use the provided change IDs
         changes = args.changes
