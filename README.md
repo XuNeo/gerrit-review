@@ -1,20 +1,24 @@
 gerrit-review
 =============
 
-A command-line tool to post review labels to Gerrit changes.
+A command-line tool to post review labels to Gerrit changes over SSH.
 
-This tool can be used to set labels (for example, Jira-Review or Code-Review) on one or more Gerrit change IDs. It also supports fetching and operating on related changes and changes within a topic.
+The tool can set labels such as `Jira-Review` or `Code-Review` on one or more changes. It can also select all changes in a topic and expand dependency ancestors and descendants.
 
 Requirements
 ------------
 
 - Python 3.8+
-- Network access to your Gerrit server with HTTP authentication configured
+- OpenSSH client (`ssh`)
+- A Gerrit SSH public key registered for your account
+- Network access to the selected Gerrit SSH instance
+
+No Gerrit HTTP password is required.
 
 Installation
 ------------
 
-### From PyPI (recommended)
+### From PyPI
 
 ```bash
 pip install gerrit-review
@@ -28,135 +32,113 @@ cd gerrit-review
 pip install -e .
 ```
 
-### Standalone script (legacy)
-
-You can also download and run the standalone script directly:
-
-```bash
-chmod +x gerrit-review
-gerrit-review --help
-```
-
 Usage
 -----
-
-Basic usage:
 
 ```bash
 gerrit-review [options] [change-id ...]
 ```
 
+### SSH instances
+
+The default connection is:
+
+```text
+xuxingliang@ocean-idc.byted.org:29418
+```
+
+Select the second independent Gerrit instance with:
+
+```bash
+gerrit-review --host ocean-review.byted.org 294498
+```
+
+The tool does not automatically search the other instance when a change is not found.
+
 ### Options
 
-- `--label <name>` : The label name to post (e.g. `Jira-Review`, `Code-Review`). Default: `Code-Review`
-- `--value <num>` : The value to post for the label (e.g. `1`, `-1`, `2`). Default: `1`
-- `--url <url>` : Gerrit base URL. Default: `https://gerrit.pt.mioffice.cn/`
-- `--user <username>`, `-u` : Gerrit username (or set `GERRIT_USER` environment variable)
-- `--password <password>`, `-p` : Gerrit HTTP password (or set `GERRIT_PASSWORD` environment variable)
-- `--topic <name>`, `-t` : Fetch all changes with the specified topic name
-- `--related` : Fetch related changes (dependency chain) for each change
-- `--dry-run` : Do not post changes, only print what would be done
-- `--message <text>` : Review message to include
+- `--host <host>`: Gerrit SSH host. Default: `ocean-idc.byted.org`
+- `--port <port>`: Gerrit SSH port. Default: `29418`
+- `--user <username>`, `-u`: Gerrit SSH username. Default: `xuxingliang`
+- `--label <name>`: Label name. Default: `Code-Review`
+- `--value <num>`: Label value. Default: `1`
+- `--topic <name>`, `-t`: Select all changes with the topic
+- `--related`: Include dependency ancestors and descendants
+- `--dry-run`: Resolve and print targets without posting reviews
+- `--message <text>`: Review message
+
+The connection defaults can also be set with `GERRIT_HOST`, `GERRIT_PORT`, and `GERRIT_USER`. Command-line options take precedence.
 
 ### Arguments
 
-- `change-id ...` : One or more Gerrit change numeric IDs. Not required if `--topic` is used.
+`change-id ...` accepts positive numeric change numbers or full Gerrit Change-Ids such as `I0123456789abcdef0123456789abcdef01234567`. At least one change or `--topic` is required.
 
-### Authentication
+Authentication
+--------------
 
-Credentials can be provided via command-line arguments or environment variables:
+The tool invokes the system OpenSSH client, so private keys, `ssh-agent`, host keys, proxies, and other SSH behavior remain controlled by your normal SSH configuration.
+
+Verify both configured instances with:
 
 ```bash
-# Using command-line arguments
-gerrit-review --user myuser --password mypass --label Jira-Review --value 1 6197799
-
-# Using environment variables
-export GERRIT_USER=myuser
-export GERRIT_PASSWORD=mypass
-gerrit-review --label Jira-Review --value 1 6197799
+ssh -p 29418 xuxingliang@ocean-idc.byted.org gerrit version
+ssh -p 29418 xuxingliang@ocean-review.byted.org gerrit version
 ```
-
-Command-line arguments take precedence over environment variables.
 
 Examples
 --------
 
-### Example 1: Review specific changes
-
-Post a label to one or more changes:
+### Review specific changes on the default instance
 
 ```bash
-gerrit-review --label Jira-Review --value 1 6197799 6197798
+gerrit-review --label Jira-Review --value 1 18032 18747
 ```
 
-### Example 2: Review changes with their dependencies
-
-Fetch related changes (dependency chain) and post the label to all:
+### Review a change and its dependency chain
 
 ```bash
-gerrit-review --label Jira-Review --value 1 6197799 --related
+gerrit-review --related --label Jira-Review --value 1 18032
 ```
 
-Output:
-```text
-🔍 Fetching related changes for 6197799 ...
-Found 2 change(s):
-  - 6197798
-  - 6197799
+`--related` follows open changes through both `dependsOn` and `neededBy` transitively. Merged or abandoned changes form a boundary and are not reviewed. Each final target is reviewed at its current patch set.
 
-✅ Posted Jira-Review=1 to 6197798
-✅ Posted Jira-Review=1 to 6197799
-```
-
-### Example 3: Review all changes in a topic
-
-Fetch all changes with a specific topic and post the label:
+### Review every change in a topic
 
 ```bash
 gerrit-review --topic "my-feature" --label Jira-Review --value 1
 ```
 
-### Example 4: Review topic changes with their dependencies
-
-Fetch all changes in a topic, then fetch their related changes (dependency chains), and post the label to all:
+### Use the ocean-review instance
 
 ```bash
-gerrit-review --topic "my-feature" --related --label Jira-Review --value 1
+gerrit-review \
+  --host ocean-review.byted.org \
+  --label Code-Review \
+  --value 1 \
+  294498
 ```
 
-Output:
-```text
-🔍 Fetching changes with topic 'my-feature' ...
-🔍 Fetching related changes for 6181520 ...
-🔍 Fetching related changes for 6181521 ...
-Found 5 change(s):
-  - 6181519
-  - 6181520
-  - 6181521
-  - 6181522
-  - 6181523
-
-✅ Posted Jira-Review=1 to 6181519
-✅ Posted Jira-Review=1 to 6181520
-...
-```
-
-### Example 5: Dry run
-
-Preview what would be done without actually posting:
+### Include a message
 
 ```bash
-gerrit-review --topic "my-feature" --related --label Jira-Review --value 1 --dry-run
+gerrit-review --message "Reviewed dependency chain" --related 18032
 ```
+
+### Dry run
+
+```bash
+gerrit-review --topic "my-feature" --related --dry-run
+```
+
+Dry-run still performs read-only SSH queries so that Change-Ids, current patch sets, and dependencies can be resolved, but it never invokes `gerrit review`.
 
 Notes
 -----
 
-- This script uses Gerrit's REST API and requires HTTP authentication
-- The `--related` flag fetches changes in the dependency chain (parent/child commits)
-- The `--topic` flag queries all changes tagged with the specified topic
-- When both topic and related are used, the script first fetches all changes in the topic, then expands to include their dependency chains
-- Results are automatically deduplicated when multiple changes reference the same dependencies
+- Topic queries use `--no-limit`, so Gerrit's default query limit does not silently omit changes.
+- Discovery must complete before any review is posted. A discovery failure stops the operation.
+- If one review post fails, the tool continues with the remaining targets and exits nonzero afterward.
+- This tool posts change-level messages and labels. It does not manage inline comments or comment threads.
 
 Contributing
 ------------
@@ -165,4 +147,5 @@ Contributions, fixes, and documentation improvements are welcome. Open an issue 
 
 License
 -------
+
 This project is licensed under the MIT License — see the `LICENSE` file for details.

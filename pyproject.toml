@@ -26,10 +26,6 @@ classifiers = [
     "Topic :: Software Development :: Build Tools",
     "Topic :: Software Development :: Version Control",
 ]
-dependencies = [
-    "requests>=2.25.0",
-]
-
 [project.optional-dependencies]
 dev = [
     "pytest>=7.0",
